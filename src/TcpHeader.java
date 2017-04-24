@@ -46,21 +46,11 @@ public class TcpHeader {
         return Utils.concatAll(firstRowBytes, secondRowBytes, thirdRowBytes, fourthRowBytes, fifthRowBytes);
     }
 
-    public void setChecksum(int checksum) {
-        this.checksum = checksum;
-    }
-
-    public int getChecksum() {
-        return this.checksum;
-    }
-
     public static TcpHeader deserialize(byte[] headerBytes) {
         int sequenceNum = Utils.byteArrayToIntBigEndian(Arrays.copyOfRange(headerBytes, 4, 8));
         int ackNum = Utils.byteArrayToIntBigEndian(Arrays.copyOfRange(headerBytes, 8, 12));
         int rowFour = Utils.byteArrayToIntBigEndian(Arrays.copyOfRange(headerBytes, 12, 16));
         int rowFive = Utils.byteArrayToIntBigEndian(Arrays.copyOfRange(headerBytes, 16, 20));
-        System.out.println(rowFour);
-        System.out.println(rowFive);
 
         int dataOffset = rowFour >>> 28;         // NOT USED
         // mask off first 10 bits, shift right
@@ -127,4 +117,24 @@ public class TcpHeader {
                 this.urgentPointer +
                 "\n";
     }
+    public void setChecksum(int checksum) {
+        this.checksum = checksum;
+    }
+
+    public int getChecksum() {
+        return this.checksum;
+    }
+
+    public int getIsAck() {
+        return this.isAck;
+    }
+
+    public int getIsSyn() {
+        return this.isSyn;
+    }
+
+    public int getIsFin() {
+        return this.isFin;
+    }
+
 }

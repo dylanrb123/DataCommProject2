@@ -27,6 +27,14 @@ public class TcpPacket {
         return Utils.concatAll(this.header.serialize(), this.data);
     }
 
+    public boolean validateChecksum() {
+        int checksumFromHeader = this.header.getChecksum();
+        this.header.setChecksum(0);
+        int calculatedChecksum = Utils.calculateIPChecksum(this.serialize());
+        this.header.setChecksum(checksumFromHeader);
+        return checksumFromHeader == calculatedChecksum;
+    }
+
     public static TcpPacket deserialize(byte[] bytes) {
         TcpHeader header = TcpHeader.deserialize(Arrays.copyOfRange(bytes, 0, 20));
         return new TcpPacket(header, Arrays.copyOfRange(bytes, 20, bytes.length));

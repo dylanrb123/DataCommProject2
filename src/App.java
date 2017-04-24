@@ -4,6 +4,7 @@ import com.beust.jcommander.Parameter;
 import java.io.IOException;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,19 +30,22 @@ public class App {
     @Parameter(description = "server port and client port")
     private List<String> params = new ArrayList<>();
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws NoSuchAlgorithmException {
         App app = new App();
         new JCommander(app, args);
         final int maxSegmentSize = 1020;
         if (app.isServer) {
             try {
-                new ServerThread(Integer.parseInt(app.params.get(0)), maxSegmentSize).start();
+                new ServerThread(Integer.parseInt(app.params.get(0)), maxSegmentSize, app.isVerbose).start();
             } catch (IOException e) {
                 e.printStackTrace();
             }
         } else if (app.isClient) {
             try {
-                new Client(app.filePath, maxSegmentSize, app.params.get(0), Integer.parseInt(app.params.get(1))).run();
+                Client client = new Client(app.filePath, maxSegmentSize, app.timeout, app.isVerbose, app.params.get(0),
+                        Integer.parseInt(app.params.get(1)));
+                client.handshake();
+                client.sendFile();
             } catch (UnknownHostException e) {
                 System.err.println("Couldn't connect to host");
                 e.printStackTrace();
