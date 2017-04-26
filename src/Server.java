@@ -6,6 +6,8 @@ import java.net.InetAddress;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 /**
  * Server thread
@@ -150,7 +152,7 @@ public class Server {
                 TcpPacket ackPacket = createAckPacket(lastAckNumber);
                 if (this.isVerbose) System.out.println("Sending ACK with number " + this.lastAckNumber);
                 sendPacket(ackPacket);
-                // TODO: check cache to see if we should ack any of the stuff there
+                checkCache(this.lastAckNumber);
             } else {
                 this.packetCache.put(packetFromClient.getHeader().getSequenceNumber(), packetFromClient);
             }
@@ -163,6 +165,25 @@ public class Server {
             }
         }
 
+    }
+
+    private void checkCache(int lastAckNumber) throws IOException {
+        if (this.packetCache.isEmpty()) {
+            return;
+        }
+
+        Iterator<Map.Entry<Integer, TcpPacket>> cacheIterator = this.packetCache.entrySet().iterator();
+        while (cacheIterator.hasNext()) {
+            Map.Entry<Integer, TcpPacket> cacheEntry = cacheIterator.next();
+            if (cacheEntry.getKey() == lastAckNumber) {
+                if (this.isVerbose) System.out.println("ACKing packet from cache with sequence number " + cacheEntry.getKey());
+                TcpPacket ackPacket = createAckPacket(cacheEntry.getKey());
+                this.lastAckNumber = cacheEntry.getKey();
+                sendPacket(ackPacket);
+                cacheIterator.remove();
+                checkCache(this.lastAckNumber);
+            }
+        }
     }
 
     /**
