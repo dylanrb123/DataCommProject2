@@ -5,11 +5,12 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
 
 /**
  * Server thread
  */
-public class ServerThread extends Thread {
+public class Server {
     private DatagramSocket socket;
     private int maxSegmentSize;
     private boolean isVerbose;
@@ -21,6 +22,7 @@ public class ServerThread extends Thread {
     private int clientPort = -1;
     private int clientSequenceNumber = -1;
     private int lastAckNumber = -1;
+    private HashMap<Integer, TcpPacket> packetCache;
 
     /**
      * Constructs the server thread, creates the UDP socket to communicate with the client
@@ -30,8 +32,7 @@ public class ServerThread extends Thread {
      * @throws IOException if there are UDP errors
      * @throws NoSuchAlgorithmException this shouldn't happen
      */
-    public ServerThread(int port, int maxSegmentSize, boolean isVerbose) throws IOException, NoSuchAlgorithmException {
-        super("ServerThread");
+    public Server(int port, int maxSegmentSize, boolean isVerbose) throws IOException, NoSuchAlgorithmException {
         this.socket = new DatagramSocket(port);
         if (isVerbose) System.out.println("Listening on port " + port + "...");
         this.maxSegmentSize = maxSegmentSize;
@@ -40,18 +41,16 @@ public class ServerThread extends Thread {
         this.connectionState = TcpConnectionState.CLOSED;
         this.sequenceNumber = 0;
         this.ackNumber = 0;
+        this.packetCache = new HashMap<>();
     }
 
-    @Override
-    public void run() {
+    public void doTheThing() {
         while(true) {
             try {
                 if (this.connectionState != TcpConnectionState.ESTABLISHED) {
                     listenForHandshake();
                 }
                 receiveFile();
-                socket.close();
-                return;
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -64,6 +63,7 @@ public class ServerThread extends Thread {
      */
     private void listenForHandshake() throws IOException {
         this.connectionState = TcpConnectionState.LISTEN;
+        if (this.isVerbose) System.out.println("Listening for handshake...");
         while (this.connectionState != TcpConnectionState.SYN_RECEIVED) {
             if (this.isVerbose) System.out.println("Waiting for SYN...");
             TcpPacket synPacket = receivePacketForHandshake();
@@ -88,6 +88,7 @@ public class ServerThread extends Thread {
         }
         // add one to the sequence number even though no data was received, special case
         TcpPacket synAckPacket = createSynAckPacket(this.sequenceNumber, this.clientSequenceNumber++);
+        this.lastAckNumber = this.clientSequenceNumber;
         sendPacket(synAckPacket);
         if (this.isVerbose) System.out.println("Waiting for ACK...");
         TcpPacket ackPacket = receivePacketForHandshake();
@@ -130,24 +131,34 @@ public class ServerThread extends Thread {
      * @throws IOException weird UDP stuff
      */
     private void receiveFile() throws IOException {
-        // TODO: deal with ordering. Cache in HashMap, compare incoming packet to expected sequence number.
-        // TODO: if it doesn't match, cache. If it does, check cache for more matches.
         if (this.isVerbose) System.out.println("Waiting for packet from client...");
         while (true) {
             TcpPacket packetFromClient = receivePacket();
             if (!packetFromClient.validateChecksum()) {
                 if (this.isVerbose) System.out.println("Received corrupted packet from client, sending duplicate ack");
                 // send duplicate ack
+                TcpPacket duplicateAck = createAckPacket(this.lastAckNumber);
+                sendPacket(duplicateAck);
             }
             if (this.isVerbose) System.out.println("Received packet from client");
-            System.out.println(packetFromClient);
-            // update this for each packet until we're done
             if (this.isVerbose) System.out.println("Updating digest");
             md5Digest.update(packetFromClient.getData());
+            this.clientSequenceNumber = packetFromClient.getHeader().getSequenceNumber();
+            // if the sequence number equals the last one we ACKed, order is good. Send ack.
+            if (clientSequenceNumber == this.lastAckNumber) {
+                this.lastAckNumber = this.clientSequenceNumber + packetFromClient.getData().length;
+                TcpPacket ackPacket = createAckPacket(lastAckNumber);
+                if (this.isVerbose) System.out.println("Sending ACK with number " + this.lastAckNumber);
+                sendPacket(ackPacket);
+                // TODO: check cache to see if we should ack any of the stuff there
+            } else {
+                this.packetCache.put(packetFromClient.getHeader().getSequenceNumber(), packetFromClient);
+            }
             // calculate the final checksum
             if (packetFromClient.getHeader().getIsFin() == 1) {
                 byte[] md5Bytes = md5Digest.digest();
                 System.out.println("MD5: " + DatatypeConverter.printHexBinary(md5Bytes));
+                this.connectionState = TcpConnectionState.CLOSED;
                 return;
             }
         }
@@ -210,5 +221,9 @@ public class ServerThread extends Thread {
     private TcpPacket createSynAckPacket(int sequenceNumber, int ackNumber) {
         TcpHeader synAckHeader = new TcpHeader(sequenceNumber, ackNumber, 1, 0, 1, 0, 0, 0);
         return new TcpPacket(synAckHeader, new byte[]{});
+    }
+
+    private TcpPacket createAckPacket(int ackNumber) {
+        return new TcpPacket(new TcpHeader(0, ackNumber, 1, 0, 0, 0, 0, 0), new byte[0]);
     }
 }

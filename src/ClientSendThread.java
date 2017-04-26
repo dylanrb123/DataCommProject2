@@ -60,6 +60,7 @@ public class ClientSendThread extends Thread {
             byte[] data = Arrays.copyOfRange(fileBytesWithPadding, i * dataPerSegment, (i + 1) * dataPerSegment);
             int isFin = i == numPackets - 1 ? 1 : 0;
             TcpPacket filePacket = createFilePacket(this.sequenceNumber, 0, isFin, data);
+            this.sequenceNumber += dataPerSegment;
             sendPacket(filePacket);
         }
     }
@@ -72,7 +73,7 @@ public class ClientSendThread extends Thread {
     private void sendPacket(TcpPacket tcpPacket) throws IOException {
         // SETS THE CHECKSUM FIELD IN THE HEADER
         tcpPacket.calculateChecksum();
-//        System.out.println(tcpPacket); // ALSO HERE?????!!!!
+        // overwhelming the server without the sleep, should resolve when pipeline is in place
         try {
             Thread.sleep(1);
         } catch (InterruptedException e) {

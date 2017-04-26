@@ -12,10 +12,10 @@ import java.util.List;
  * App class for TPC implementation
  */
 public class App {
-    @Parameter(names = {"-c", "--client"}, description = "run as the client")
+    @Parameter(names = {"-c", "--client"}, description = "doTheThing as the client")
     private boolean isClient = false;
 
-    @Parameter(names = {"-s", "--server"}, description = "run as the server")
+    @Parameter(names = {"-s", "--server"}, description = "doTheThing as the server")
     private boolean isServer = false;
 
     @Parameter(names = {"-f", "--file"}, description = "specify file for client to send")
@@ -41,7 +41,7 @@ public class App {
         final int maxSegmentSize = 1020;
         if (app.isServer) {
             try {
-                new ServerThread(Integer.parseInt(app.params.get(0)), maxSegmentSize, app.isVerbose).start();
+                new Server(Integer.parseInt(app.params.get(0)), maxSegmentSize, app.isVerbose).doTheThing();
             } catch (IOException e) {
                 e.printStackTrace();
             }
