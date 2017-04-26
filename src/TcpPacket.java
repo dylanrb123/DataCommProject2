@@ -17,14 +17,6 @@ public class TcpPacket {
         this.data = data;
     }
 
-    public byte[] getData() {
-        return this.data;
-    }
-
-    public TcpHeader getHeader() {
-        return this.header;
-    }
-
     /**
      * Calculates and sets the IP checksum of the packet
      * @return the checksum
@@ -33,14 +25,6 @@ public class TcpPacket {
         int checksum = Utils.calculateIPChecksum(this.serialize());
         this.header.setChecksum(checksum);
         return checksum;
-    }
-
-    /**
-     * Serialized the packet into a byte array
-     * @return the serialized packet
-     */
-    public byte[] serialize() {
-        return Utils.concatAll(this.header.serialize(), this.data);
     }
 
     /**
@@ -57,6 +41,14 @@ public class TcpPacket {
     }
 
     /**
+     * Serialized the packet into a byte array
+     * @return the serialized packet
+     */
+    public byte[] serialize() {
+        return Utils.concatAll(this.header.serialize(), this.data);
+    }
+
+    /**
      * Deserializes a byte array into a TcpPacket object
      * @param bytes the serialized packet
      * @return the TcpPacket object
@@ -64,6 +56,14 @@ public class TcpPacket {
     public static TcpPacket deserialize(byte[] bytes) {
         TcpHeader header = TcpHeader.deserialize(Arrays.copyOfRange(bytes, 0, 20));
         return new TcpPacket(header, Arrays.copyOfRange(bytes, 20, bytes.length));
+    }
+
+    public byte[] getData() {
+        return this.data;
+    }
+
+    public TcpHeader getHeader() {
+        return this.header;
     }
 
     @Override

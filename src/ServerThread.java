@@ -49,7 +49,7 @@ public class ServerThread extends Thread {
                 if (this.connectionState != TcpConnectionState.ESTABLISHED) {
                     listenForHandshake();
                 }
-                //receiveFile();
+                receiveFile();
                 socket.close();
                 return;
             } catch (IOException e) {
@@ -66,7 +66,7 @@ public class ServerThread extends Thread {
         this.connectionState = TcpConnectionState.LISTEN;
         while (this.connectionState != TcpConnectionState.SYN_RECEIVED) {
             if (this.isVerbose) System.out.println("Waiting for SYN...");
-            TcpPacket synPacket = receivePacket();
+            TcpPacket synPacket = receivePacketForHandshake();
             if (synPacket.getHeader().getIsRst() == 1) {
                 if (this.isVerbose) System.out.println("Received RST from client, restarting handshake...");
                 continue;
@@ -88,14 +88,9 @@ public class ServerThread extends Thread {
         }
         // add one to the sequence number even though no data was received, special case
         TcpPacket synAckPacket = createSynAckPacket(this.sequenceNumber, this.clientSequenceNumber++);
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
         sendPacket(synAckPacket);
         if (this.isVerbose) System.out.println("Waiting for ACK...");
-        TcpPacket ackPacket = receivePacket();
+        TcpPacket ackPacket = receivePacketForHandshake();
         if (ackPacket.getHeader().getIsRst() == 1) {
             if (this.isVerbose) System.out.println("Received RST from client, restarting handshake...");
             listenForHandshake();
@@ -138,16 +133,24 @@ public class ServerThread extends Thread {
         // TODO: deal with ordering. Cache in HashMap, compare incoming packet to expected sequence number.
         // TODO: if it doesn't match, cache. If it does, check cache for more matches.
         if (this.isVerbose) System.out.println("Waiting for packet from client...");
-        TcpPacket packetFromClient = receivePacket();
-        if (!packetFromClient.validateChecksum()) {
-            if (this.isVerbose) System.out.println("Received corrupted packet from client, sending duplicate ack");
-            // send duplicate ack
+        while (true) {
+            TcpPacket packetFromClient = receivePacket();
+            if (!packetFromClient.validateChecksum()) {
+                if (this.isVerbose) System.out.println("Received corrupted packet from client, sending duplicate ack");
+                // send duplicate ack
+            }
+            if (this.isVerbose) System.out.println("Received packet from client");
+            System.out.println(packetFromClient);
+            // update this for each packet until we're done
+            if (this.isVerbose) System.out.println("Updating digest");
+            md5Digest.update(packetFromClient.getData());
+            // calculate the final checksum
+            if (packetFromClient.getHeader().getIsFin() == 1) {
+                byte[] md5Bytes = md5Digest.digest();
+                System.out.println("MD5: " + DatatypeConverter.printHexBinary(md5Bytes));
+                return;
+            }
         }
-        // update this for each packet until we're done
-        md5Digest.update(packetFromClient.getData());
-        // calculate the final checksum
-        byte[] md5Bytes = md5Digest.digest();
-        System.out.println("MD5: " + DatatypeConverter.printHexBinary(md5Bytes));
 
     }
 
@@ -156,8 +159,18 @@ public class ServerThread extends Thread {
      * @return the TCP packet received from the client
      * @throws IOException bleh
      */
-    private TcpPacket receivePacket() throws IOException {
+    private TcpPacket receivePacketForHandshake() throws IOException {
         byte[] buf = new byte[20];
+        DatagramPacket packet = new DatagramPacket(buf, buf.length);
+        socket.receive(packet);
+        this.clientAddress = packet.getAddress();
+        this.clientPort = packet.getPort();
+        return TcpPacket.deserialize(packet.getData());
+    }
+
+    private TcpPacket receivePacket() throws IOException {
+        // TODO: fix so it doesn't rely on padding
+        byte[] buf = new byte[this.maxSegmentSize];
         DatagramPacket packet = new DatagramPacket(buf, buf.length);
         socket.receive(packet);
         this.clientAddress = packet.getAddress();

@@ -50,7 +50,7 @@ public class Client {
     public void doTheThing() throws IOException {
         handshake();
         ClientReceiveThread receiveThread = new ClientReceiveThread();
-        ClientSendThread sendThread = new ClientSendThread();
+        ClientSendThread sendThread = new ClientSendThread(this.filePath, this.maxSegmentSize, this.socket, this.serverAddress, this.port);
         receiveThread.start();
         sendThread.start();
         try {
@@ -140,24 +140,6 @@ public class Client {
      */
     private void teardown() {
 
-    }
-
-    /**
-     * Sends the file over the established connection
-     * @throws IOException UDP stuff
-     */
-    public void sendFile() throws IOException {
-        Path path = Paths.get(filePath);
-        byte[] fileBytes = Files.readAllBytes(path);
-//        for (int i = 0; i < fileBytes.length; i += (this.maxSegmentSize - 20)) {
-            // set checksum to zero initially
-            TcpHeader header = new TcpHeader(10, 20, 1, 0, 1, 0, 4, 0);
-            // make the packet, header plus bytes of data up to max segment size
-            int dataLength = Math.min(this.maxSegmentSize - 20, fileBytes.length);
-            TcpPacket tcpPacket = new TcpPacket(header, Arrays.copyOfRange(fileBytes, 0, dataLength));
-            tcpPacket.calculateChecksum();      // SETS CHECKSUM FIELD IN HEADER
-            sendPacket(tcpPacket);
-//        }
     }
 
     /**
