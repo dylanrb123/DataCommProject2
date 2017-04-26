@@ -30,6 +30,11 @@ public class App {
     @Parameter(description = "server port and client port")
     private List<String> params = new ArrayList<>();
 
+    /**
+     * Parses args and creates the client or server objects, as specified by the args
+     * @param args command line args
+     * @throws NoSuchAlgorithmException this shouldn't happen
+     */
     public static void main(String[] args) throws NoSuchAlgorithmException {
         App app = new App();
         new JCommander(app, args);

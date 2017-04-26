@@ -1,6 +1,4 @@
 import java.util.Arrays;
-import java.util.Formatter;
-import java.util.Locale;
 
 public class TcpHeader {
     private int sourcePort = 0;         // ALWAYS ZERO
@@ -18,6 +16,17 @@ public class TcpHeader {
     private int checksum;
     private int urgentPointer = 0;      // ALWAYS ZERO
 
+    /**
+     * Constructs the TCP header object
+     * @param sequenceNumber the sequence number
+     * @param ackNumber the ack number
+     * @param isAck 1 if is ack
+     * @param isRst 1 if is rst
+     * @param isSyn 1 if is syn
+     * @param isFin 1 if is fin
+     * @param window congestion window
+     * @param checksum checksum of the packet
+     */
     public TcpHeader(int sequenceNumber, int ackNumber, int isAck, int isRst,
                      int isSyn, int isFin, int window, int checksum) {
         this.sequenceNumber = sequenceNumber;
@@ -30,6 +39,10 @@ public class TcpHeader {
         this.checksum = checksum;
     }
 
+    /**
+     * serialized the header into a byte array
+     * @return the serialized header
+     */
     public byte[] serialize() {
         int headerRowOne = (this.sourcePort << 16) | this.destinationPort;
         int headerRowTwo = this.sequenceNumber;
@@ -46,6 +59,11 @@ public class TcpHeader {
         return Utils.concatAll(firstRowBytes, secondRowBytes, thirdRowBytes, fourthRowBytes, fifthRowBytes);
     }
 
+    /**
+     * Deserialized a byte array into a TcpHeader object
+     * @param headerBytes byte array to deserialize
+     * @return the TcpHeader object
+     */
     public static TcpHeader deserialize(byte[] headerBytes) {
         int sequenceNum = Utils.byteArrayToIntBigEndian(Arrays.copyOfRange(headerBytes, 4, 8));
         int ackNum = Utils.byteArrayToIntBigEndian(Arrays.copyOfRange(headerBytes, 8, 12));

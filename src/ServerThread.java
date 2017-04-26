@@ -5,8 +5,10 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * Server thread
+ */
 public class ServerThread extends Thread {
     private DatagramSocket socket;
     private int maxSegmentSize;
@@ -20,6 +22,14 @@ public class ServerThread extends Thread {
     private int clientSequenceNumber = -1;
     private int lastAckNumber = -1;
 
+    /**
+     * Constructs the server thread, creates the UDP socket to communicate with the client
+     * @param port port to listen on
+     * @param maxSegmentSize max segment size to send over the connection
+     * @param isVerbose turn on verbose mode
+     * @throws IOException if there are UDP errors
+     * @throws NoSuchAlgorithmException this shouldn't happen
+     */
     public ServerThread(int port, int maxSegmentSize, boolean isVerbose) throws IOException, NoSuchAlgorithmException {
         super("ServerThread");
         this.socket = new DatagramSocket(port);
@@ -32,6 +42,7 @@ public class ServerThread extends Thread {
         this.ackNumber = 0;
     }
 
+    @Override
     public void run() {
         while(true) {
             try {
@@ -47,6 +58,10 @@ public class ServerThread extends Thread {
         }
     }
 
+    /**
+     * Performs the server's part of the three way handshake
+     * @throws IOException if there's weird stuff with the UDP port
+     */
     private void listenForHandshake() throws IOException {
         this.connectionState = TcpConnectionState.LISTEN;
         while (this.connectionState != TcpConnectionState.SYN_RECEIVED) {
@@ -114,6 +129,11 @@ public class ServerThread extends Thread {
         this.connectionState = TcpConnectionState.ESTABLISHED;
     }
 
+    /**
+     * Receive the file from the client. Deals with out of order packets. Prints MD5 checksum of the file when the
+     * client sends a FIN packet
+     * @throws IOException weird UDP stuff
+     */
     private void receiveFile() throws IOException {
         // TODO: deal with ordering. Cache in HashMap, compare incoming packet to expected sequence number.
         // TODO: if it doesn't match, cache. If it does, check cache for more matches.
@@ -131,6 +151,11 @@ public class ServerThread extends Thread {
 
     }
 
+    /**
+     * Receives a single packet from the client
+     * @return the TCP packet received from the client
+     * @throws IOException bleh
+     */
     private TcpPacket receivePacket() throws IOException {
         byte[] buf = new byte[20];
         DatagramPacket packet = new DatagramPacket(buf, buf.length);
@@ -140,6 +165,11 @@ public class ServerThread extends Thread {
         return TcpPacket.deserialize(packet.getData());
     }
 
+    /**
+     * Sends a single packet to the client. Sets the checksum field before sending.
+     * @param tcpPacket packet to send
+     * @throws IOException bleh
+     */
     private void sendPacket(TcpPacket tcpPacket) throws IOException {
         // SETS THE CHECKSUM FIELD IN THE HEADER
         tcpPacket.calculateChecksum();
@@ -149,11 +179,21 @@ public class ServerThread extends Thread {
         socket.send(udpPacket);
     }
 
+    /**
+     * Creates an empty RST packet
+     * @return the packet
+     */
     private TcpPacket createRstPacket() {
         TcpHeader rstHeader = new TcpHeader(0, 0, 0, 1, 0, 0, 0, 0);
         return new TcpPacket(rstHeader, new byte[0]);
     }
 
+    /**
+     * Creates an empty SYN-ACK packet
+     * @param sequenceNumber sequence number to send
+     * @param ackNumber ack number to send
+     * @return the packet
+     */
     private TcpPacket createSynAckPacket(int sequenceNumber, int ackNumber) {
         TcpHeader synAckHeader = new TcpHeader(sequenceNumber, ackNumber, 1, 0, 1, 0, 0, 0);
         return new TcpPacket(synAckHeader, new byte[]{});
