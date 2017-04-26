@@ -51,7 +51,6 @@ public class TcpHeader {
         int ackNum = Utils.byteArrayToIntBigEndian(Arrays.copyOfRange(headerBytes, 8, 12));
         int rowFour = Utils.byteArrayToIntBigEndian(Arrays.copyOfRange(headerBytes, 12, 16));
         int rowFive = Utils.byteArrayToIntBigEndian(Arrays.copyOfRange(headerBytes, 16, 20));
-
         int dataOffset = rowFour >>> 28;         // NOT USED
         // mask off first 10 bits, shift right
         int flags = (rowFour >>> 16) & 0x3F;
@@ -137,4 +136,15 @@ public class TcpHeader {
         return this.isFin;
     }
 
+    public int getIsRst() {
+        return isRst;
+    }
+
+    public int getSequenceNumber() {
+        return sequenceNumber;
+    }
+
+    public int getAckNumber() {
+        return ackNumber;
+    }
 }

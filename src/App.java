@@ -44,8 +44,7 @@ public class App {
             try {
                 Client client = new Client(app.filePath, maxSegmentSize, app.timeout, app.isVerbose, app.params.get(0),
                         Integer.parseInt(app.params.get(1)));
-                client.handshake();
-                client.sendFile();
+                client.doTheThing();
             } catch (UnknownHostException e) {
                 System.err.println("Couldn't connect to host");
                 e.printStackTrace();
