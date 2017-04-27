@@ -7,7 +7,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 public class ClientSendThread extends Thread {
     private String filePath;
@@ -17,6 +20,7 @@ public class ClientSendThread extends Thread {
     private InetAddress serverAddress;
     private int serverPort;
     private int sequenceNumber;
+    private List<DatagramPacket> sendBuffer;
 
     public ClientSendThread(String filePath, int maxSegmentSize, DatagramSocket socket, InetAddress serverAddress, int serverPort) {
         super("SendThread");
@@ -26,6 +30,8 @@ public class ClientSendThread extends Thread {
         this.socket = socket;
         this.serverAddress = serverAddress;
         this.serverPort = serverPort;
+        this.sendBuffer = new ArrayList<>();
+        this.sequenceNumber = 1;
     }
 
     @Override
@@ -44,10 +50,12 @@ public class ClientSendThread extends Thread {
     public void sendFile() throws IOException {
         Path path = Paths.get(filePath);
         byte[] fileBytes = Files.readAllBytes(path);
-        int numPackets = (int) Math.ceil((double)fileBytes.length / dataPerSegment);
+        byte[] smallerFile = new byte[50000];
+        System.arraycopy(fileBytes, 0, smallerFile, 0, 50000);
+        int numPackets = (int) Math.ceil((double)smallerFile.length / dataPerSegment);
         // TODO: fix so it doesn't rely on padding
         byte[] fileBytesWithPadding = new byte[numPackets * dataPerSegment];
-        System.arraycopy(fileBytes, 0, fileBytesWithPadding, 0, fileBytes.length);
+        System.arraycopy(smallerFile, 0, fileBytesWithPadding, 0, smallerFile.length);
         try {
             MessageDigest md5Digest = MessageDigest.getInstance("MD5");
             md5Digest.update(fileBytesWithPadding);
@@ -57,12 +65,14 @@ public class ClientSendThread extends Thread {
             e.printStackTrace();
         }
         for (int i = 0; i < numPackets; i++) {
+
             byte[] data = Arrays.copyOfRange(fileBytesWithPadding, i * dataPerSegment, (i + 1) * dataPerSegment);
             int isFin = i == numPackets - 1 ? 1 : 0;
             TcpPacket filePacket = createFilePacket(this.sequenceNumber, 0, isFin, data);
             this.sequenceNumber += dataPerSegment;
             sendPacket(filePacket);
         }
+        sendPackets(this.sendBuffer.size());
     }
 
     /**
@@ -82,7 +92,14 @@ public class ClientSendThread extends Thread {
         byte[] tcpPacketBytes = tcpPacket.serialize();
         DatagramPacket udpPacket = new DatagramPacket(tcpPacketBytes, tcpPacketBytes.length,
                 this.serverAddress, this.serverPort);
-        socket.send(udpPacket);
+        this.sendBuffer.add(udpPacket);
+    }
+
+    private void sendPackets(int congestionWindow) throws IOException {
+        Collections.reverse(this.sendBuffer);
+        for (int i = 0; i < congestionWindow; i++) {
+            socket.send(this.sendBuffer.get(i));
+        }
     }
 
     private TcpPacket createFilePacket(int sequenceNumber, int window, int isFin, byte[] data) {

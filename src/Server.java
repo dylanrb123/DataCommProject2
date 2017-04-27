@@ -133,7 +133,7 @@ public class Server {
      * @throws IOException weird UDP stuff
      */
     private void receiveFile() throws IOException {
-        if (this.isVerbose) System.out.println("Waiting for packet from client...");
+        if (this.isVerbose) System.out.println("Waiting for sequence number: " + this.lastAckNumber);
         while (true) {
             TcpPacket packetFromClient = receivePacket();
             if (!packetFromClient.validateChecksum()) {
@@ -142,48 +142,60 @@ public class Server {
                 TcpPacket duplicateAck = createAckPacket(this.lastAckNumber);
                 sendPacket(duplicateAck);
             }
-            if (this.isVerbose) System.out.println("Received packet from client");
-            if (this.isVerbose) System.out.println("Updating digest");
-            md5Digest.update(packetFromClient.getData());
             this.clientSequenceNumber = packetFromClient.getHeader().getSequenceNumber();
-            // if the sequence number equals the last one we ACKed, order is good. Send ack.
-            if (clientSequenceNumber == this.lastAckNumber) {
-                this.lastAckNumber = this.clientSequenceNumber + packetFromClient.getData().length;
-                TcpPacket ackPacket = createAckPacket(lastAckNumber);
-                if (this.isVerbose) System.out.println("Sending ACK with number " + this.lastAckNumber);
-                sendPacket(ackPacket);
-                checkCache(this.lastAckNumber);
-            } else {
-                this.packetCache.put(packetFromClient.getHeader().getSequenceNumber(), packetFromClient);
+            if (this.isVerbose) {
+                System.out.println("Expecting packet with sequence number: " + this.lastAckNumber);
+                System.out.println("Received packet with sequence number: " + this.clientSequenceNumber);
             }
-            // calculate the final checksum
-            if (packetFromClient.getHeader().getIsFin() == 1) {
-                byte[] md5Bytes = md5Digest.digest();
-                System.out.println("MD5: " + DatatypeConverter.printHexBinary(md5Bytes));
-                this.connectionState = TcpConnectionState.CLOSED;
-                return;
+            // if the sequence number equals the last one we ACKed, order is good. Send ack.
+            if (this.clientSequenceNumber == this.lastAckNumber) {
+                if (this.isVerbose) {
+                    System.out.println("Sequence number matches expected number");
+                    System.out.println("Updating digest");
+                }
+                md5Digest.update(packetFromClient.getData());
+                this.lastAckNumber = this.clientSequenceNumber + packetFromClient.getData().length;
+                sendAckPacket(lastAckNumber);
+                boolean isDone = checkCache(this.lastAckNumber);
+                if (isDone) return;
+                // calculate the final checksum
+                if (packetFromClient.getHeader().getIsFin() == 1) {
+                    byte[] md5Bytes = md5Digest.digest();
+                    System.out.println("MD5: " + DatatypeConverter.printHexBinary(md5Bytes));
+                    this.connectionState = TcpConnectionState.CLOSED;
+                    return;
+                }
+
+            } else {
+                if (this.isVerbose) System.out.println("Received out of order packet, adding to cache");
+                this.packetCache.put(packetFromClient.getHeader().getSequenceNumber(), packetFromClient);
             }
         }
 
     }
 
-    private void checkCache(int lastAckNumber) throws IOException {
+    private boolean checkCache(int lastAckNumber) throws IOException {
         if (this.packetCache.isEmpty()) {
-            return;
+            return false;
         }
 
-        Iterator<Map.Entry<Integer, TcpPacket>> cacheIterator = this.packetCache.entrySet().iterator();
-        while (cacheIterator.hasNext()) {
-            Map.Entry<Integer, TcpPacket> cacheEntry = cacheIterator.next();
+        for (Map.Entry<Integer, TcpPacket> cacheEntry : this.packetCache.entrySet()) {
             if (cacheEntry.getKey() == lastAckNumber) {
-                if (this.isVerbose) System.out.println("ACKing packet from cache with sequence number " + cacheEntry.getKey());
-                TcpPacket ackPacket = createAckPacket(cacheEntry.getKey());
-                this.lastAckNumber = cacheEntry.getKey();
-                sendPacket(ackPacket);
-                cacheIterator.remove();
-                checkCache(this.lastAckNumber);
+                if (this.isVerbose)
+                    System.out.println("ACKing packet from cache with sequence number " + cacheEntry.getKey());
+                this.lastAckNumber = cacheEntry.getKey() + cacheEntry.getValue().getData().length;
+                this.md5Digest.update(cacheEntry.getValue().getData());
+                sendAckPacket(this.lastAckNumber);
+                if (cacheEntry.getValue().getHeader().getIsFin() == 1) {
+                    byte[] md5Bytes = md5Digest.digest();
+                    System.out.println("MD5: " + DatatypeConverter.printHexBinary(md5Bytes));
+                    this.connectionState = TcpConnectionState.CLOSED;
+                    return true;
+                }
+                return checkCache(this.lastAckNumber);
             }
         }
+        return false;
     }
 
     /**
@@ -222,6 +234,16 @@ public class Server {
         DatagramPacket udpPacket = new DatagramPacket(tcpPacketBytes, tcpPacketBytes.length,
                 this.clientAddress, this.clientPort);
         socket.send(udpPacket);
+    }
+
+    private void sendAckPacket(int ackNumber) throws IOException {
+        TcpPacket ackPacket = createAckPacket(ackNumber);
+        if (this.isVerbose) System.out.println("Sending ACK with number " + ackNumber);
+        sendPacket(ackPacket);
+    }
+
+    private void checkDone() {
+
     }
 
     /**
